@@ -26,10 +26,21 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Привет! Я бот.")
 
 def run_bot():
-    """Запускает бота в отдельном потоке"""
+   # """Запускает бота в отдельном потоке"""
+    import asyncio
+    
+    # Создаем новый цикл событий для потока, чтобы избежать ошибок
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    
     application = ApplicationBuilder().token(TOKEN).build()
     application.add_handler(CommandHandler("start", start))
-    application.run_polling()
+    
+    # Запускаем поллинг (слушаем сообщения)
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+
+
 
 # Запускаем Flask-сервер и бота в одном процессе
 if __name__ == "__main__":
