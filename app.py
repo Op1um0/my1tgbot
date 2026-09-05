@@ -1,11 +1,9 @@
 import os
 import threading
-import time
 from flask import Flask
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# Токен берется из переменных окружения, а не из кода
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
 if not TOKEN:
@@ -21,33 +19,25 @@ def home():
 def health():
     return "OK"
 
-# --- Логика бота ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Привет! Я бот.")
 
 def run_bot():
-   # """Запускает бота в отдельном потоке"""
+    """Запускает бота (работает в ГЛАВНОМ потоке)"""
     import asyncio
-    
-    # Создаем новый цикл событий для потока, чтобы избежать ошибок
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    import nest_asyncio
+    nest_asyncio.apply()  # Критически важно для совместимости
     
     application = ApplicationBuilder().token(TOKEN).build()
     application.add_handler(CommandHandler("start", start))
-    
-    # Запускаем поллинг (слушаем сообщения)
+    # Запускаем поллинг
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
-
-
-
-# Запускаем Flask-сервер и бота в одном процессе
 if __name__ == "__main__":
-    # Запускаем бота в фоновом потоке
-    bot_thread = threading.Thread(target=run_bot, daemon=True)
-    bot_thread.start()
-
-    # Запускаем Flask-сервер
+    # Запускаем Flask в отдельном потоке, чтобы Render был доволен
     port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port)
+    flask_thread = threading.Thread(target=lambda: app.run(host='0.0.0.0', port=port), daemon=True)
+    flask_thread.start()
+
+    # Запускаем бота в ГЛАВНОМ потоке
+    run_bot()
