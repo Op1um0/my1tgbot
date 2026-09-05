@@ -1,12 +1,10 @@
 import os
-import asyncio
 import random
 import requests
 from flask import Flask
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# Конфигурация
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
 if not TOKEN:
@@ -14,16 +12,17 @@ if not TOKEN:
 
 app = Flask(__name__)
 
-# --- Настройки для Render (чтобы сервис считался живым) ---
 @app.route('/')
 def home():
     return "Бот работает!"
+
 @app.route('/health')
 def health():
     return "OK"
 
-# --- Список цитат Тарантино ---
+# --- СПИСОК ШУТОК ТАРАНТИНО (10 старых + 10 новых = 20) ---
 TARANTINO_QUOTES = [
+    # Старые
     "«Это забавно: насколько всё меняется, когда начинаешь говорить правду» — Криминальное чтиво",
     "«Зэд мёртв, детка. Зэд мёртв» — Криминальное чтиво",
     "«Вы будете лаять весь день, маленький пёсик? Или вы укусите?» — Бешеные псы",
@@ -33,15 +32,25 @@ TARANTINO_QUOTES = [
     "«Я, может, и ублюдок, но я не гребаный ублюдок» — От заката до рассвета",
     "«Мы в бизнесе убийства нацистов. И дела идут отлично» — Бесславные ублюдки",
     "«Итак, когда ты вырастешь, я буду ждать» — Убить Билла",
-    "«Королевский с сыром» — Криминальное чтиво"
+    "«Королевский с сыром» — Криминальное чтиво",
+    # Новые 10 шуток
+    "«Мне плевать, что ты говоришь, мне плевать, что ты делаешь, но не смей называть меня негодяем!» — Бешеные псы",
+    "«Ты не знаешь, кто я такой, но я знаю, кто ты. И я найду тебя» — Убить Билла",
+    "«Я хочу сыграть в игру. Угадай, что в моей руке?» — Джанго освобождённый",
+    "«Сюрприз, сука! Я уверен, ты не ожидал меня увидеть» — Бесславные ублюдки",
+    "«Если ты хочешь добиться успеха, ты должен верить в себя. Но не слишком сильно, иначе ты поверишь в то, что ты можешь летать» — Джанго освобождённый",
+    "«Это очень плохой день для того, чтобы быть предателем» — Бешеные псы",
+    "«Они съели мою собаку. Это было очень плохо. Я съел их» — Омерзительная восьмёрка",
+    "«Я играю роль самого себя. Ты просто играешь роль самого себя. Все мы просто играем роли самих себя» — Криминальное чтиво",
+    "«Если в этом мире есть одна вещь, которую я ненавижу, так это то, когда люди не доводят начатое до конца» — Бесславные ублюдки",
+    "«Я не убийца. Я просто человек, который любит решать проблемы. Просто иногда мои решения кровавые» — Убить Билла"
 ]
 
-# --- Функции для получения данных ---
-
+# --- КОМАНДЫ ---
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Привет! Я универсальный бот.\n"
-        "Доступные команды:\n"
+        "Команды:\n"
         "/help - список команд\n"
         "/quote - случайная цитата из фильмов Тарантино\n"
         "/btc - курс Биткоина\n"
@@ -59,14 +68,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 async def quote(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Выбираем случайную цитату
     joke = random.choice(TARANTINO_QUOTES)
     await update.message.reply_text(joke)
 
 async def btc_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        # Получаем цену BTC в USD с CoinGecko (не требует API-ключа)
-        response = requests.get('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd')
+        response = requests.get('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd', timeout=10)
         data = response.json()
         price = data['bitcoin']['usd']
         await update.message.reply_text(f"💰 Курс Биткоина (BTC/USD): ${price:,.2f}")
@@ -75,11 +82,12 @@ async def btc_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def moex_index(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        # Получаем индекс МосБиржи (IMOEX)
+        # Добавляем заголовок User-Agent, чтобы API не блокировало запрос
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
         url = "https://iss.moex.com/iss/statistics/engines/stock/markets/index/securities/IMOEX.json"
-        response = requests.get(url)
+        response = requests.get(url, headers=headers, timeout=10)
         data = response.json()
-        # Ищем значение текущей цены индекса
+        
         current_price = None
         if 'marketdata' in data and 'columns' in data['marketdata']:
             cols = data['marketdata']['columns']
@@ -89,17 +97,17 @@ async def moex_index(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     index = cols.index('CURRENTVALUE')
                     current_price = row[index]
                     break
+        
         if current_price:
             await update.message.reply_text(f"📈 Индекс МосБиржи (IMOEX): {current_price}")
         else:
-            await update.message.reply_text("Не удалось получить данные индекса МосБиржи.")
+            await update.message.reply_text("Не удалось получить данные индекса МосБиржи (сервер вернул пустоту).")
     except Exception as e:
-        await update.message.reply_text("Не удалось получить данные индекса МосБиржи.")
+        await update.message.reply_text("Не удалось получить данные индекса МосБиржи. Скорее всего, API блокирует запросы из-за границы.")
 
 async def weather(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        # Используем API wttr.in для получения погоды в Ростове-на-Дону
-        response = requests.get('https://wttr.in/Rostov-on-Don?format=j1')
+        response = requests.get('https://wttr.in/Rostov-on-Don?format=j1', timeout=10)
         data = response.json()
         current = data['current_condition'][0]
         temp = current['temp_C']
@@ -113,8 +121,17 @@ async def weather(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text("Не удалось получить данные о погоде.")
 
-async def run_bot():
+# --- ЗАПУСК ---
+if __name__ == "__main__":
+    print("Запуск бота...")
+    
+    import threading
+    port = int(os.environ.get("PORT", 5000))
+    flask_thread = threading.Thread(target=lambda: app.run(host='0.0.0.0', port=port), daemon=True)
+    flask_thread.start()
+
     application = ApplicationBuilder().token(TOKEN).build()
+    
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("quote", quote))
@@ -122,22 +139,5 @@ async def run_bot():
     application.add_handler(CommandHandler("moex", moex_index))
     application.add_handler(CommandHandler("weather", weather))
 
-    print("Бот запускается и слушает сообщения...")
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-    stop_signal = asyncio.Event()
-    await stop_signal.wait()
-
-if __name__ == "__main__":
-    # Запускаем Flask в фоновом потоке, чтобы Render видел порт
-    import threading
-    port = int(os.environ.get("PORT", 5000))
-    flask_thread = threading.Thread(target=lambda: app.run(host='0.0.0.0', port=port), daemon=True)
-    flask_thread.start()
-
-    # Запускаем бота
-    try:
-        asyncio.run(run_bot())
-    except (KeyboardInterrupt, SystemExit):
-        print("Бот остановлен.")
+    print("Бот запускается...")
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
